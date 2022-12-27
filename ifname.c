@@ -1,5 +1,7 @@
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <ifaddrs.h>
 #include <sys/types.h>
@@ -7,7 +9,63 @@
 #include <sys/socket.h>
 #include <linux/wireless.h>
 
+#define VERSION "1.0.0"
+/*
+     ifr_flags 的各項旗標和說明：
+         IFF_UP              裝置正在運作
+         IFF_BROADCAST       有效的廣播位址
+         IFF_DEBUG           Debug 標誌
+         IFF_LOOPBACK        這是 Loopback 裝置
+         IFF_POINTOPOINT     這是點到點的網路裝置介面
+         IFF_RUNNING         資源已分配
+         IFF_NOARP           無arp協議，沒有設置第二層目的地址
+         IFF_PROMISC         介面為雜湊(promiscuous)模式
+         IFF_NOTRAILERS      避免使用 trailer
+         IFF_ALLMULTI        接收所有群組廣播(multicast)封包資料
+         IFF_MASTER          主負載平衡群(bundle)
+         IFF_SLAVE           從負載平衡群(bundle)
+         IFF_MULTICAST       支援群組廣播(multicast)
+         IFF_PORTSEL         可以通過 ifmap 選擇 media 類型
+         IFF_AUTOMEDIA       自動選擇 media
+         IFF_DYNAMIC         裝置介面關閉時丟棄地址
+ */
 
+int is_p2p(const char* ifname,  char* protocol){
+    struct ifreq ifr;
+    int sockfd;
+    int rc = 0;
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    bzero(&ifr, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+    ioctl(sockfd, SIOCGIFFLAGS, &ifr);
+     if (ifr.ifr_flags & IFF_POINTOPOINT) {
+         fprintf(stderr, "%s is point to point deivce!\n", ifname);
+         strncpy(protocol, "p2p", IFNAMSIZ);
+        rc = 1;
+     }
+    close(sockfd);
+    return rc;
+
+}
+int is_loopback(const char* ifname,  char* protocol){
+    struct ifreq ifr;
+    int sockfd;
+    int rc = 0;
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    bzero(&ifr, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
+
+    ioctl(sockfd, SIOCGIFFLAGS, &ifr);
+     if (ifr.ifr_flags & IFF_LOOPBACK) {
+         fprintf(stderr, "%s is loopback!\n", ifname);
+         strncpy(protocol, "Loopback", IFNAMSIZ);
+        rc = 1;
+     }
+    close(sockfd);
+    return rc;
+
+}
 int check_wireless(const char* ifname, char* protocol) {
   int sock = -1;
   struct iwreq pwrq;
@@ -29,8 +87,41 @@ int check_wireless(const char* ifname, char* protocol) {
   return 0;
 }
 
+void usage( char *name) {
+        printf("Usage: \n");
+        printf("%s [-a] [-d]\n",name);
+        printf(" -a: show all interface include loopbak, ppp\n");
+        printf(" -d: show detail info of the interface\n");
+        printf(" -v: show version\n");
+        printf(" -h: show this help\n");
+        exit(1);
+}
+void showversion(){
+    fprintf(stderr, "v%s\n", VERSION);
+    exit(1);
+}
+int main(int argc, char  *argv[]) {
+    bool showAll=false;
+    bool showDetail=false;
+    int c;
+    extern char *optarg;
+    while(( c = getopt(argc,argv, "advh" )) != EOF ) {    // Loop the arguments
+        switch(c) {
+        case 'a':
+            //printf("a option %s\n",optarg);
+            showAll=true;
+              break;
+        case 'd':
+            showDetail=true;
+              break;
+        case 'v':
+            showversion();
+              break;
+        case 'h':
+        default:  usage( argv[0]);
+        }
+    }
 
-int main(int argc, char const *argv[]) {
   struct ifaddrs *ifaddr, *ifa;
 
   if (getifaddrs(&ifaddr) == -1) {
@@ -42,18 +133,40 @@ int main(int argc, char const *argv[]) {
      can free list later */
   for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
     char protocol[IFNAMSIZ]  = {0};
+    char detail[IFNAMSIZ]  = {0};
 
     if (ifa->ifa_addr == NULL ||
-        ifa->ifa_addr->sa_family != AF_PACKET) continue;
+        ifa->ifa_addr->sa_family != AF_PACKET) {
+            // not addr,  not AF_PACKET (Ethernet II)
+            continue;
+    }
 
     if (check_wireless(ifa->ifa_name, protocol)) {
-      //printf("%s, wireless: %s\n", ifa->ifa_name, protocol);
-      printf("%s, wlan, %s\n", ifa->ifa_name, protocol);
+        //printf("%s, wireless: %s\n", ifa->ifa_name, protocol);
+        if (showDetail) {
+            printf("%s, Wlan, %s\n", ifa->ifa_name, protocol);
+            } else{
+                printf("%s\n", ifa->ifa_name);
+        }
     } else {
-      printf("%s, not wireless\n", ifa->ifa_name);
+        strncpy(detail, "Net", IFNAMSIZ);
+        if (is_loopback(ifa->ifa_name, detail)){
+            if (! showAll){   // ignore loopback
+                continue;
+            }
+        }
+        if(is_p2p(ifa->ifa_name, detail)){
+             if (! showAll){   // ignore p2p
+                continue;
+            }
+        }
+        if (showDetail) {
+            printf("%s, %s\n", ifa->ifa_name, detail);
+            } else {
+            printf("%s\n", ifa->ifa_name);
+        }
     }
   }
-
   freeifaddrs(ifaddr);
   return 0;
 }
