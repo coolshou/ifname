@@ -4,6 +4,7 @@
 #STRIP=i686-linux-gnu-strip
 # x86_64
 CC=gcc
+LDFLAGS=-static
 STRIP=x86_64-linux-gnu-strip
 
 #raspeberry /opt/cross-pi-gcc/bin/
@@ -12,7 +13,7 @@ STRIP=x86_64-linux-gnu-strip
 #STRIP=arm-linux-gnueabihf-strip
 
 all:
-	${CC} -o ifname ifname.c
+	${CC} ${LDFLAGS} -o ifname ifname.c
 	${STRIP} ifname
 
 clean:
