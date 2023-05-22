@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #include <linux/wireless.h>
 
-#define VERSION "1.0.0"
+#define VERSION "1.2023.05.22"
 /*
      ifr_flags 的各項旗標和說明：
          IFF_UP              裝置正在運作
@@ -58,7 +58,7 @@ int is_loopback(const char* ifname,  char* protocol){
 
     ioctl(sockfd, SIOCGIFFLAGS, &ifr);
      if (ifr.ifr_flags & IFF_LOOPBACK) {
-         fprintf(stderr, "%s is loopback!\n", ifname);
+        //  fprintf(stderr, "%s is loopback!\n", ifname);
          strncpy(protocol, "Loopback", IFNAMSIZ);
         rc = 1;
      }
@@ -92,6 +92,7 @@ void usage( char *name) {
         printf("%s [-a] [-d]\n",name);
         printf(" -a: show all interface include loopbak, ppp\n");
         printf(" -d: show detail info of the interface\n");
+        printf(" -w: show wifi interface only\n");
         printf(" -v: show version\n");
         printf(" -h: show this help\n");
         exit(1);
@@ -103,10 +104,14 @@ void showversion(){
 int main(int argc, char  *argv[]) {
     bool showAll=false;
     bool showDetail=false;
+    bool showWiFi=false;
     int c;
     extern char *optarg;
-    while(( c = getopt(argc,argv, "advh" )) != EOF ) {    // Loop the arguments
+    while(( c = getopt(argc,argv, "adwvh" )) != EOF ) {    // Loop the arguments
         switch(c) {
+        case 'w':
+            showWiFi=true;
+            break;
         case 'a':
             //printf("a option %s\n",optarg);
             showAll=true;
@@ -142,28 +147,32 @@ int main(int argc, char  *argv[]) {
     }
 
     if (check_wireless(ifa->ifa_name, protocol)) {
-        //printf("%s, wireless: %s\n", ifa->ifa_name, protocol);
-        if (showDetail) {
-            printf("%s, Wlan, %s\n", ifa->ifa_name, protocol);
-            } else{
-                printf("%s\n", ifa->ifa_name);
+        if (showWiFi){
+            //printf("%s, wireless: %s\n", ifa->ifa_name, protocol);
+            if (showDetail) {
+                printf("%s, Wlan, %s\n", ifa->ifa_name, protocol);
+                } else{
+                    printf("%s\n", ifa->ifa_name);
+            }
         }
     } else {
-        strncpy(detail, "Net", IFNAMSIZ);
-        if (is_loopback(ifa->ifa_name, detail)){
-            if (! showAll){   // ignore loopback
-                continue;
+        if (!showWiFi) {
+            strncpy(detail, "Net", IFNAMSIZ);
+            if (is_loopback(ifa->ifa_name, detail)){
+                if (! showAll){   // ignore loopback
+                    continue;
+                }
             }
-        }
-        if(is_p2p(ifa->ifa_name, detail)){
-             if (! showAll){   // ignore p2p
-                continue;
+            if(is_p2p(ifa->ifa_name, detail)){
+                if (! showAll){   // ignore p2p
+                    continue;
+                }
             }
-        }
-        if (showDetail) {
-            printf("%s, %s\n", ifa->ifa_name, detail);
+            if (showDetail) {
+                printf("%s, %s\n", ifa->ifa_name, detail);
             } else {
-            printf("%s\n", ifa->ifa_name);
+                printf("%s\n", ifa->ifa_name);
+            }
         }
     }
   }
