@@ -4,12 +4,15 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <ifaddrs.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <linux/wireless.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
-#define VERSION "1.2023.05.22"
+#define VERSION "1.2024.02.19"
 /*
      ifr_flags 的各項旗標和說明：
          IFF_UP              裝置正在運作
@@ -65,6 +68,58 @@ int is_loopback(const char* ifname,  char* protocol){
     close(sockfd);
     return rc;
 
+}
+int getIPAddr(const char* ifname, char* ipaddr){
+    int rc = 0;
+    int fd;
+    struct ifreq ifr;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    /* I want to get an IPv4 IP address */
+    ifr.ifr_addr.sa_family = AF_INET;
+    /* I want IP address attached to "eth0" */
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
+    if (ioctl(fd, SIOCGIFADDR, &ifr) !=-1){
+        close(fd);
+        /* display result */
+        //printf("%s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
+        if (ipaddr) {
+            strncpy(ipaddr, inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr), IFNAMSIZ);
+        }
+        //return inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
+    }else{
+        perror(ifname);
+        return -1;
+    }
+    return rc;
+}
+int getMask(const char* ifname, char* ipmask){
+    int rc = 0;
+    int fd;
+    struct ifreq ifr;
+    unsigned int  mask;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    /* I want to get an IPv4 IP address */
+    ifr.ifr_addr.sa_family = AF_INET;
+    /* I want IP address attached to "eth0" */
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
+    if (ioctl(fd, SIOCGIFNETMASK, &ifr) !=-1){
+        close(fd);
+        /* display result */
+        //printf("%s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
+         if (ipmask) {
+            mask = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr;
+            sprintf(ipmask, "%d.%d.%d.%d", mask & 0xff,
+                                            ((mask >> 8) & 0xff),
+                                            ((mask >> 16) & 0xff),
+                                            ((mask >> 24) & 0xff));
+         }
+    }else{
+        perror(ifname);
+        return -1;
+    }
+    return rc;
 }
 int check_wireless(const char* ifname, char* protocol) {
   int sock = -1;
@@ -139,6 +194,8 @@ int main(int argc, char  *argv[]) {
   for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
     char protocol[IFNAMSIZ]  = {0};
     char detail[IFNAMSIZ]  = {0};
+    char ipaddr[IFNAMSIZ]  = {0};
+    char ipmask[20]  = {0};
 
     if (ifa->ifa_addr == NULL ||
         ifa->ifa_addr->sa_family != AF_PACKET) {
@@ -147,12 +204,17 @@ int main(int argc, char  *argv[]) {
     }
 
     if (check_wireless(ifa->ifa_name, protocol)) {
-        if (showWiFi){
+        if (showWiFi || showAll){
             //printf("%s, wireless: %s\n", ifa->ifa_name, protocol);
             if (showDetail) {
-                printf("%s, Wlan, %s\n", ifa->ifa_name, protocol);
-                } else{
-                    printf("%s\n", ifa->ifa_name);
+                if ((getIPAddr(ifa->ifa_name, ipaddr)==0) && (getMask(ifa->ifa_name, ipmask)==0)){
+                    printf("%s, Wlan, %s, %s, %s\n", ifa->ifa_name, protocol, 
+                        ipaddr, ipmask);
+                }else{
+                    printf("%s, Wlan, %s\n", ifa->ifa_name, protocol);
+                }
+            } else{
+                printf("%s\n", ifa->ifa_name);
             }
         }
     } else {
@@ -169,7 +231,12 @@ int main(int argc, char  *argv[]) {
                 }
             }
             if (showDetail) {
-                printf("%s, %s\n", ifa->ifa_name, detail);
+                if ((getIPAddr(ifa->ifa_name, ipaddr)==0) && (getMask(ifa->ifa_name, ipmask)==0)){
+                    printf("%s, %s, %s, %s\n", ifa->ifa_name, detail, 
+                        ipaddr, ipmask);
+                }else{
+                    printf("%s, %s\n", ifa->ifa_name, detail);
+                }
             } else {
                 printf("%s\n", ifa->ifa_name);
             }
