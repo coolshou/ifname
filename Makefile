@@ -17,11 +17,14 @@ all: x64 x86
 	#${CC} ${LDFLAGS} -o ${TARGET} ${TARGET}.c
 	#${STRIP} ${TARGET}
 
-x64:
+x64: clean
 	${CC} ${LDFLAGS} -m64 -o ${TARGET} ${TARGET}.c
+	${STRIP} ${TARGET}
 	mv ${TARGET} amd64/
-x86:
+
+x86: clean
 	${CC} ${LDFLAGS} -m32 -o ${TARGET} ${TARGET}.c
+	${STRIP} ${TARGET}
 	mv ${TARGET} x86/
 
 clean:
